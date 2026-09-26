@@ -1,0 +1,1197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Document Console — RAG Q&A</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.3.0/marked.min.js"></script>
+<style>
+:root{
+  --bg:#12151A;
+  --surface:#191D24;
+  --surface-2:#20252E;
+  --surface-3:#282E39;
+  --border:#2C323D;
+  --border-soft:#232833;
+  --text:#E7EAEE;
+  --text-dim:#93A0B0;
+  --text-faint:#5C6675;
+  --accent:#4FD1C5;
+  --accent-dim:#2A6E68;
+  --accent-glow:rgba(79,209,197,0.15);
+  --warn:#F0A868;
+  --danger:#F87171;
+  --danger-dim:#3A2323;
+  --success:#6EE7A8;
+  --radius:10px;
+  --radius-sm:6px;
+  --font-display:'Space Grotesk',sans-serif;
+  --font-body:'Inter',sans-serif;
+  --font-mono:'IBM Plex Mono',monospace;
+}
+
+*{box-sizing:border-box;}
+html,body{height:100%;}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--font-body);
+  font-size:14px;
+  line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+
+::selection{background:var(--accent-glow);color:var(--text);}
+::-webkit-scrollbar{width:8px;height:8px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--surface-3);border-radius:8px;}
+::-webkit-scrollbar-thumb:hover{background:var(--border);}
+
+button, input, select{font-family:inherit;}
+button{cursor:pointer;}
+a{color:var(--accent);}
+
+/* SVG icons default to "no stroke" unless told otherwise — inherit the
+   parent's text color by default so every icon renders without needing
+   a per-icon color rule. Anything that needs a fixed color (not inherited)
+   still overrides this below. */
+svg{stroke:currentColor;}
+
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+
+/* ---------- App shell ---------- */
+.app{
+  display:grid;
+  grid-template-columns:340px 1fr;
+  height:100vh;
+  overflow:hidden;
+}
+@media (max-width: 880px){
+  .app{grid-template-columns:1fr;}
+  .sidebar{
+    position:fixed;
+    inset:0 20% 0 0;
+    z-index:40;
+    transform:translateX(-100%);
+    transition:transform .28s cubic-bezier(.4,0,.2,1);
+    box-shadow:20px 0 40px rgba(0,0,0,.4);
+  }
+  .sidebar.open{transform:translateX(0);}
+  .sidebar-scrim{
+    position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:39;
+    opacity:0;pointer-events:none;transition:opacity .28s;
+  }
+  .sidebar-scrim.show{opacity:1;pointer-events:auto;}
+  .mobile-menu-btn{display:flex !important;}
+}
+
+/* ---------- Sidebar ---------- */
+.sidebar{
+  background:var(--surface);
+  border-right:1px solid var(--border-soft);
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
+.brand{
+  padding:20px 20px 16px;
+  border-bottom:1px solid var(--border-soft);
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.brand-mark{
+  width:30px;height:30px;
+  border-radius:7px;
+  background:linear-gradient(135deg, var(--accent), #2C9C90);
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+  position:relative;
+}
+.brand-mark::after{
+  content:"";
+  position:absolute;inset:0;
+  border-radius:7px;
+  box-shadow:0 0 0 1px rgba(255,255,255,.15) inset;
+}
+.brand-mark svg{width:16px;height:16px;stroke:#0A1210;}
+.brand-text h1{
+  font-family:var(--font-display);
+  font-size:15px;
+  font-weight:600;
+  margin:0;
+  letter-spacing:-0.01em;
+}
+.brand-text span{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  color:var(--text-faint);
+  text-transform:uppercase;
+  letter-spacing:.06em;
+}
+
+.sidebar-body{
+  flex:1;
+  overflow-y:auto;
+  padding:18px 18px 24px;
+  display:flex;
+  flex-direction:column;
+  gap:22px;
+}
+
+.section-label{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  color:var(--text-faint);
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin-bottom:10px;
+}
+.section-label .count{
+  background:var(--surface-3);
+  color:var(--text-dim);
+  padding:1px 6px;
+  border-radius:20px;
+  font-size:10px;
+}
+
+/* Dropzone */
+.dropzone{
+  border:1.5px dashed var(--border);
+  border-radius:var(--radius);
+  padding:20px 14px;
+  text-align:center;
+  transition:border-color .15s, background .15s;
+  position:relative;
+  background:var(--surface-2);
+}
+.dropzone.drag-over{
+  border-color:var(--accent);
+  background:var(--accent-glow);
+}
+.dropzone svg{
+  width:22px;height:22px;
+  stroke:var(--text-faint);
+  margin-bottom:8px;
+}
+.dropzone p{
+  margin:0 0 2px;
+  font-size:12.5px;
+  color:var(--text-dim);
+}
+.dropzone .hint{
+  font-size:11px;
+  color:var(--text-faint);
+  font-family:var(--font-mono);
+}
+.dropzone input[type=file]{
+  position:absolute;inset:0;
+  opacity:0;cursor:pointer;
+}
+.dropzone.busy{pointer-events:none;opacity:.6;}
+
+.upload-progress{
+  margin-top:10px;
+  display:none;
+  flex-direction:column;
+  gap:6px;
+}
+.upload-progress.show{display:flex;}
+.upload-progress-bar{
+  height:3px;
+  background:var(--surface-3);
+  border-radius:4px;
+  overflow:hidden;
+}
+.upload-progress-fill{
+  height:100%;
+  width:30%;
+  background:var(--accent);
+  border-radius:4px;
+  animation:indeterminate 1.1s ease-in-out infinite;
+}
+@keyframes indeterminate{
+  0%{transform:translateX(-100%);width:40%;}
+  50%{width:60%;}
+  100%{transform:translateX(250%);width:40%;}
+}
+.upload-progress-label{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  color:var(--text-dim);
+}
+
+/* URL ingest */
+.field-row{display:flex;gap:6px;}
+.text-input{
+  flex:1;
+  background:var(--surface-2);
+  border:1px solid var(--border);
+  color:var(--text);
+  border-radius:var(--radius-sm);
+  padding:8px 10px;
+  font-size:12.5px;
+  transition:border-color .15s;
+}
+.text-input:focus{border-color:var(--accent);}
+.text-input::placeholder{color:var(--text-faint);}
+.btn-icon{
+  background:var(--surface-3);
+  border:1px solid var(--border);
+  color:var(--text-dim);
+  border-radius:var(--radius-sm);
+  width:34px;
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+  transition:background .15s, color .15s;
+}
+.btn-icon:hover{background:var(--accent-dim);color:var(--accent);}
+.btn-icon svg{width:15px;height:15px;}
+.btn-icon:disabled{opacity:.4;pointer-events:none;}
+
+/* Document list */
+.doc-list{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+.doc-empty{
+  font-size:12px;
+  color:var(--text-faint);
+  font-style:italic;
+  padding:6px 2px;
+}
+.doc-item{
+  background:var(--surface-2);
+  border:1px solid var(--border-soft);
+  border-radius:var(--radius-sm);
+  padding:9px 10px;
+  display:flex;
+  align-items:center;
+  gap:9px;
+  transition:border-color .15s;
+}
+.doc-item:hover{border-color:var(--border);}
+.doc-item-icon{
+  width:26px;height:26px;
+  border-radius:6px;
+  background:var(--surface-3);
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+}
+.doc-item-icon svg{width:13px;height:13px;stroke:var(--accent);}
+.doc-item-info{flex:1;min-width:0;}
+.doc-item-name{
+  font-size:12px;
+  font-weight:500;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.doc-item-type{
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  color:var(--text-faint);
+  text-transform:uppercase;
+}
+.doc-item-del{
+  background:transparent;
+  border:none;
+  color:var(--text-faint);
+  width:22px;height:22px;
+  border-radius:5px;
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+  transition:background .15s, color .15s;
+}
+.doc-item-del:hover{background:var(--danger-dim);color:var(--danger);}
+.doc-item-del svg{width:13px;height:13px;}
+
+.sidebar-footer{
+  padding:12px 18px;
+  border-top:1px solid var(--border-soft);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+}
+.status-pill{
+  display:flex;align-items:center;gap:6px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  color:var(--text-faint);
+}
+.status-dot{
+  width:6px;height:6px;border-radius:50%;
+  background:var(--success);
+  box-shadow:0 0 0 3px rgba(110,231,168,.15);
+}
+.link-btn{
+  background:none;border:none;
+  color:var(--text-faint);
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  text-decoration:underline;
+  text-underline-offset:2px;
+}
+.link-btn:hover{color:var(--text-dim);}
+
+/* ---------- Main panel ---------- */
+.main{
+  display:flex;
+  flex-direction:column;
+  height:100vh;
+  min-width:0;
+}
+.topbar{
+  height:56px;
+  flex-shrink:0;
+  border-bottom:1px solid var(--border-soft);
+  display:flex;
+  align-items:center;
+  padding:0 22px;
+  gap:14px;
+}
+.mobile-menu-btn{
+  display:none;
+  background:none;border:1px solid var(--border);
+  border-radius:var(--radius-sm);
+  width:32px;height:32px;
+  align-items:center;justify-content:center;
+  color:var(--text-dim);
+  flex-shrink:0;
+}
+.mobile-menu-btn svg{width:16px;height:16px;}
+.topbar h2{
+  font-family:var(--font-display);
+  font-size:14.5px;
+  font-weight:600;
+  margin:0;
+}
+.topbar-sub{
+  font-family:var(--font-mono);
+  font-size:11px;
+  color:var(--text-faint);
+}
+.topbar-spacer{flex:1;}
+.tune-btn{
+  background:var(--surface-2);
+  border:1px solid var(--border);
+  color:var(--text-dim);
+  border-radius:var(--radius-sm);
+  padding:6px 11px;
+  font-size:11.5px;
+  display:flex;align-items:center;gap:6px;
+  transition:border-color .15s, color .15s;
+}
+.tune-btn:hover{border-color:var(--accent);color:var(--accent);}
+.tune-btn svg{width:13px;height:13px;}
+
+.tune-panel{
+  position:absolute;
+  top:56px;right:22px;
+  background:var(--surface-2);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:16px;
+  width:230px;
+  box-shadow:0 12px 30px rgba(0,0,0,.4);
+  display:none;
+  flex-direction:column;
+  gap:12px;
+  z-index:30;
+}
+.tune-panel.show{display:flex;}
+.tune-row label{
+  display:flex;justify-content:space-between;
+  font-size:11.5px;color:var(--text-dim);
+  margin-bottom:5px;
+}
+.tune-row label span:last-child{
+  font-family:var(--font-mono);color:var(--accent);
+}
+.tune-row input[type=range]{
+  width:100%;accent-color:var(--accent);
+}
+
+/* Chat area */
+.chat-scroll{
+  flex:1;
+  overflow-y:auto;
+  padding:24px 0 12px;
+}
+.chat-inner{
+  max-width:760px;
+  margin:0 auto;
+  padding:0 24px;
+  display:flex;
+  flex-direction:column;
+  gap:22px;
+}
+
+.empty-state{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  padding:60px 20px;
+  color:var(--text-faint);
+  gap:14px;
+}
+.empty-state .glyph{
+  width:52px;height:52px;
+  border-radius:14px;
+  background:var(--surface-2);
+  border:1px solid var(--border-soft);
+  display:flex;align-items:center;justify-content:center;
+}
+.empty-state .glyph svg{width:24px;height:24px;stroke:var(--accent);}
+.empty-state h3{
+  font-family:var(--font-display);
+  font-size:16px;color:var(--text-dim);margin:0;font-weight:600;
+}
+.empty-state p{font-size:12.5px;margin:0;max-width:320px;}
+
+.msg{display:flex;flex-direction:column;gap:8px;max-width:100%;}
+.msg-user{align-items:flex-end;}
+.msg-bubble{
+  border-radius:var(--radius);
+  padding:11px 14px;
+  font-size:13.5px;
+  line-height:1.6;
+}
+.msg-user .msg-bubble{
+  background:var(--accent-dim);
+  color:#DFFFFB;
+  border:1px solid rgba(79,209,197,.25);
+  max-width:80%;
+  border-bottom-right-radius:3px;
+}
+.msg-assistant .msg-bubble{
+  background:var(--surface-2);
+  border:1px solid var(--border-soft);
+  border-bottom-left-radius:3px;
+}
+.msg-assistant .msg-bubble.no-results{
+  color:var(--text-dim);
+  font-style:italic;
+}
+.msg-meta{
+  font-family:var(--font-mono);
+  font-size:10px;
+  color:var(--text-faint);
+  padding:0 4px;
+}
+.msg-bubble p{margin:0 0 8px;}
+.msg-bubble p:last-child{margin-bottom:0;}
+.msg-bubble code{
+  background:var(--surface-3);
+  padding:1px 5px;
+  border-radius:4px;
+  font-family:var(--font-mono);
+  font-size:.9em;
+}
+.msg-bubble pre{
+  background:var(--surface-3);
+  padding:10px 12px;
+  border-radius:6px;
+  overflow-x:auto;
+}
+.msg-bubble pre code{background:none;padding:0;}
+.msg-bubble ul, .msg-bubble ol{margin:6px 0;padding-left:20px;}
+.msg-bubble a{color:var(--accent);}
+.msg-bubble strong{color:#fff;}
+
+.cite-tag{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:16px;height:16px;
+  padding:0 4px;
+  background:var(--accent-dim);
+  color:var(--accent);
+  border-radius:4px;
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  font-weight:500;
+  vertical-align:2px;
+  margin:0 1px;
+}
+
+.typing-dots{display:flex;gap:4px;padding:4px 0;}
+.typing-dots span{
+  width:5px;height:5px;border-radius:50%;
+  background:var(--text-faint);
+  animation:blink 1.3s infinite ease-in-out;
+}
+.typing-dots span:nth-child(2){animation-delay:.15s;}
+.typing-dots span:nth-child(3){animation-delay:.3s;}
+@keyframes blink{0%,80%,100%{opacity:.25;}40%{opacity:1;}}
+
+/* Citations */
+.citations-block{margin-top:2px;}
+.citations-toggle{
+  background:none;border:none;
+  color:var(--text-faint);
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  display:flex;align-items:center;gap:5px;
+  padding:2px 4px;
+  transition:color .15s;
+}
+.citations-toggle:hover{color:var(--accent);}
+.citations-toggle svg{width:11px;height:11px;transition:transform .18s;}
+.citations-toggle.open svg{transform:rotate(90deg);}
+.citations-list{
+  display:none;
+  flex-direction:column;
+  gap:6px;
+  margin-top:8px;
+}
+.citations-list.show{display:flex;}
+.citation-card{
+  background:var(--surface-2);
+  border:1px solid var(--border-soft);
+  border-left:2px solid var(--accent-dim);
+  border-radius:var(--radius-sm);
+  padding:9px 11px;
+  font-size:12px;
+}
+.citation-head{
+  display:flex;
+  align-items:baseline;
+  gap:7px;
+  flex-wrap:wrap;
+  margin-bottom:4px;
+}
+.citation-num{
+  font-family:var(--font-mono);
+  font-size:10px;
+  color:var(--accent);
+  background:var(--accent-glow);
+  padding:0 5px;
+  border-radius:4px;
+}
+.citation-source{font-weight:500;color:var(--text);}
+.citation-meta{
+  font-family:var(--font-mono);
+  font-size:10px;
+  color:var(--text-faint);
+}
+.citation-heading{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  color:var(--warn);
+  margin:4px 0 5px;
+  display:flex;align-items:center;gap:5px;
+}
+.citation-context{
+  color:var(--text-dim);
+  line-height:1.55;
+  font-size:12px;
+}
+.citation-dist{
+  margin-left:auto;
+  font-family:var(--font-mono);
+  font-size:10px;
+  color:var(--text-faint);
+}
+
+/* Composer */
+.composer-wrap{
+  border-top:1px solid var(--border-soft);
+  padding:14px 24px 18px;
+  flex-shrink:0;
+}
+.composer{
+  max-width:760px;
+  margin:0 auto;
+  background:var(--surface-2);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:6px 6px 6px 16px;
+  display:flex;
+  align-items:flex-end;
+  gap:8px;
+  transition:border-color .15s;
+}
+.composer:focus-within{border-color:var(--accent);}
+.composer textarea{
+  flex:1;
+  background:none;
+  border:none;
+  color:var(--text);
+  font-family:var(--font-body);
+  font-size:13.5px;
+  resize:none;
+  max-height:140px;
+  padding:9px 0;
+  line-height:1.5;
+}
+.composer textarea:focus{outline:none;}
+.composer textarea::placeholder{color:var(--text-faint);}
+.send-btn{
+  background:var(--accent);
+  border:none;
+  color:#0A1210;
+  width:36px;height:36px;
+  border-radius:8px;
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+  transition:opacity .15s, transform .1s;
+}
+.send-btn:hover{opacity:.88;}
+.send-btn:active{transform:scale(.94);}
+.send-btn:disabled{background:var(--surface-3);color:var(--text-faint);pointer-events:none;}
+.send-btn svg{width:16px;height:16px;}
+.composer-foot{
+  max-width:760px;margin:8px auto 0;
+  display:flex;justify-content:space-between;
+  font-family:var(--font-mono);
+  font-size:10px;
+  color:var(--text-faint);
+  padding:0 2px;
+}
+
+/* Toasts */
+.toast-stack{
+  position:fixed;
+  bottom:20px;right:20px;
+  display:flex;flex-direction:column;gap:8px;
+  z-index:100;
+}
+.toast{
+  background:var(--surface-2);
+  border:1px solid var(--border);
+  border-left:3px solid var(--accent);
+  border-radius:var(--radius-sm);
+  padding:10px 14px;
+  font-size:12.5px;
+  min-width:240px;
+  max-width:340px;
+  box-shadow:0 10px 26px rgba(0,0,0,.35);
+  display:flex;align-items:flex-start;gap:9px;
+  animation:toast-in .22s cubic-bezier(.4,0,.2,1);
+}
+.toast.error{border-left-color:var(--danger);}
+.toast.success{border-left-color:var(--success);}
+.toast svg{width:15px;height:15px;flex-shrink:0;margin-top:1px;}
+.toast.error svg{stroke:var(--danger);}
+.toast.success svg{stroke:var(--success);}
+.toast:not(.error):not(.success) svg{stroke:var(--accent);}
+@keyframes toast-in{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+
+@media (prefers-reduced-motion: reduce){
+  *{animation-duration:.001s !important; transition-duration:.001s !important;}
+}
+</style>
+</head>
+<body>
+
+<div class="sidebar-scrim" id="scrim"></div>
+
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h5"/></svg>
+      </div>
+      <div class="brand-text">
+        <h1>Document Console</h1>
+        <span>Local RAG Instance</span>
+      </div>
+    </div>
+
+    <div class="sidebar-body">
+      <div>
+        <div class="section-label">Add source</div>
+        <div class="dropzone" id="dropzone">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v3a2 2 0 002 2h12a2 2 0 002-2v-3"/></svg>
+          <p>Drop a file or click to browse</p>
+          <span class="hint">PDF · DOCX · TXT — max 10MB</span>
+          <input type="file" id="fileInput" accept=".pdf,.docx,.txt">
+        </div>
+        <div class="upload-progress" id="uploadProgress">
+          <div class="upload-progress-bar"><div class="upload-progress-fill"></div></div>
+          <div class="upload-progress-label" id="uploadProgressLabel">Uploading…</div>
+        </div>
+
+        <div style="height:12px"></div>
+        <div class="field-row">
+          <input type="text" class="text-input" id="urlInput" placeholder="https://… ingest a URL">
+          <button class="btn-icon" id="urlBtn" title="Ingest URL">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-label">Indexed documents <span class="count" id="docCount">0</span></div>
+        <div class="doc-list" id="docList">
+          <div class="doc-empty">No documents indexed yet.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="status-pill"><span class="status-dot"></span>Backend online</div>
+      <button class="link-btn" id="resetBtn">reset session</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar" style="position:relative;">
+      <button class="mobile-menu-btn" id="menuBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+      </button>
+      <div>
+        <h2>Ask your documents</h2>
+        <div class="topbar-sub" id="topbarSub">grounded answers, cited by chunk</div>
+      </div>
+      <div class="topbar-spacer"></div>
+      <button class="tune-btn" id="tuneBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7M4 10V3M12 21v-11M12 6V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>
+        Parameters
+      </button>
+      <div class="tune-panel" id="tunePanel">
+        <div class="tune-row">
+          <label><span>Results (n)</span><span id="nResultsVal">3</span></label>
+          <input type="range" id="nResults" min="1" max="8" value="3">
+        </div>
+        <div class="tune-row">
+          <label><span>Temperature</span><span id="tempVal">0.3</span></label>
+          <input type="range" id="temperature" min="0" max="1" step="0.05" value="0.3">
+        </div>
+        <div class="tune-row">
+          <label><span>Top-k</span><span id="topKVal">40</span></label>
+          <input type="range" id="topK" min="1" max="100" value="40">
+        </div>
+      </div>
+    </div>
+
+    <div class="chat-scroll" id="chatScroll">
+      <div class="chat-inner" id="chatInner">
+        <div class="empty-state" id="emptyState">
+          <div class="glyph">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+          </div>
+          <h3>No conversation yet</h3>
+          <p>Upload a document on the left, then ask a question. Answers are grounded strictly in what you've indexed, with citations you can expand.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="composer-wrap">
+      <div class="composer">
+        <textarea id="questionInput" placeholder="Ask a question about your documents…" rows="1"></textarea>
+        <button class="send-btn" id="sendBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/></svg>
+        </button>
+      </div>
+      <div class="composer-foot">
+        <span>Enter to send · Shift+Enter for newline</span>
+        <span id="sessionLabel">session: —</span>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="toast-stack" id="toastStack"></div>
+
+<script>
+const API_BASE = "http://127.0.0.1:8000";
+
+/* ---------------- utils ---------------- */
+function getSessionId(){
+  let id = localStorage.getItem("session_id");
+  if(!id){ id = crypto.randomUUID(); localStorage.setItem("session_id", id); }
+  return id;
+}
+function escapeHtml(str){
+  const d = document.createElement("div");
+  d.innerText = str;
+  return d.innerHTML;
+}
+function toast(message, type=""){
+  const stack = document.getElementById("toastStack");
+  const el = document.createElement("div");
+  el.className = "toast" + (type ? " " + type : "");
+  const icons = {
+    error: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16h.01"/></svg>',
+    success: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>',
+    "": '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>'
+  };
+  el.innerHTML = (icons[type] || icons[""]) + "<div>" + escapeHtml(message) + "</div>";
+  stack.appendChild(el);
+  setTimeout(() => {
+    el.style.transition = "opacity .2s, transform .2s";
+    el.style.opacity = "0";
+    el.style.transform = "translateY(6px)";
+    setTimeout(() => el.remove(), 200);
+  }, 4200);
+}
+function fileIconLabel(name){
+  const ext = (name.split(".").pop() || "").toLowerCase();
+  if(ext === "pdf") return "PDF";
+  if(ext === "docx") return "DOCX";
+  if(ext === "txt") return "TXT";
+  if(name.startsWith("http")) return "URL";
+  return ext.toUpperCase() || "FILE";
+}
+
+/* ---------------- sidebar / mobile ---------------- */
+const sidebar = document.getElementById("sidebar");
+const scrim = document.getElementById("scrim");
+document.getElementById("menuBtn").addEventListener("click", () => {
+  sidebar.classList.add("open"); scrim.classList.add("show");
+});
+scrim.addEventListener("click", () => {
+  sidebar.classList.remove("open"); scrim.classList.remove("show");
+});
+
+/* ---------------- tune panel ---------------- */
+const tuneBtn = document.getElementById("tuneBtn");
+const tunePanel = document.getElementById("tunePanel");
+tuneBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  tunePanel.classList.toggle("show");
+});
+document.addEventListener("click", (e) => {
+  if(!tunePanel.contains(e.target) && e.target !== tuneBtn) tunePanel.classList.remove("show");
+});
+const nResultsInput = document.getElementById("nResults");
+const temperatureInput = document.getElementById("temperature");
+const topKInput = document.getElementById("topK");
+nResultsInput.addEventListener("input", () => document.getElementById("nResultsVal").innerText = nResultsInput.value);
+temperatureInput.addEventListener("input", () => document.getElementById("tempVal").innerText = temperatureInput.value);
+topKInput.addEventListener("input", () => document.getElementById("topKVal").innerText = topKInput.value);
+
+/* ---------------- session label ---------------- */
+document.getElementById("sessionLabel").innerText = "session: " + getSessionId().slice(0, 8);
+
+/* ---------------- documents panel ---------------- */
+async function refreshDocuments(){
+  try{
+    const res = await fetch(API_BASE + "/documents");
+    const data = await res.json();
+    renderDocuments(data.documents || []);
+  }catch(err){
+    toast("Couldn't reach the backend for document list", "error");
+  }
+}
+
+function renderDocuments(docs){
+  const list = document.getElementById("docList");
+  document.getElementById("docCount").innerText = docs.length;
+  if(docs.length === 0){
+    list.innerHTML = '<div class="doc-empty">No documents indexed yet.</div>';
+    return;
+  }
+  list.innerHTML = "";
+  docs.forEach(name => {
+    const item = document.createElement("div");
+    item.className = "doc-item";
+    item.innerHTML = `
+      <div class="doc-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg></div>
+      <div class="doc-item-info">
+        <div class="doc-item-name" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
+        <div class="doc-item-type">${fileIconLabel(name)}</div>
+      </div>
+      <button class="doc-item-del" title="Delete">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z"/></svg>
+      </button>`;
+    item.querySelector(".doc-item-del").addEventListener("click", () => deleteDocument(name));
+    list.appendChild(item);
+  });
+}
+
+async function deleteDocument(name){
+  try{
+    const res = await fetch(API_BASE + "/delete", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({filename: name})
+    });
+    if(!res.ok) throw new Error("delete failed");
+    toast(`Removed "${name}" from the index`, "success");
+    refreshDocuments();
+  }catch(err){
+    toast("Failed to delete document", "error");
+  }
+}
+
+/* ---------------- upload ---------------- */
+const dropzone = document.getElementById("dropzone");
+const fileInput = document.getElementById("fileInput");
+const uploadProgress = document.getElementById("uploadProgress");
+const uploadProgressLabel = document.getElementById("uploadProgressLabel");
+
+["dragenter", "dragover"].forEach(evt =>
+  dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.add("drag-over"); })
+);
+["dragleave", "drop"].forEach(evt =>
+  dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.remove("drag-over"); })
+);
+dropzone.addEventListener("drop", (e) => {
+  const file = e.dataTransfer.files[0];
+  if(file) uploadFile(file);
+});
+fileInput.addEventListener("change", () => {
+  if(fileInput.files[0]) uploadFile(fileInput.files[0]);
+});
+
+async function uploadFile(file){
+  const allowed = [".pdf", ".docx", ".txt"];
+  const ok = allowed.some(ext => file.name.toLowerCase().endsWith(ext));
+  if(!ok){
+    toast("Only PDF, DOCX, or TXT files are supported", "error");
+    fileInput.value = "";
+    return;
+  }
+  dropzone.classList.add("busy");
+  uploadProgress.classList.add("show");
+  uploadProgressLabel.innerText = `Embedding "${file.name}"…`;
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  try{
+    const res = await fetch(API_BASE + "/upload", { method: "POST", body: formData });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.detail || "Upload failed");
+    toast(`Indexed "${data.filename}" — ${data.chunks_stored} chunks stored`, "success");
+    refreshDocuments();
+  }catch(err){
+    toast(err.message || "Upload failed", "error");
+  }finally{
+    dropzone.classList.remove("busy");
+    uploadProgress.classList.remove("show");
+    fileInput.value = "";
+  }
+}
+
+/* ---------------- url ingest ---------------- */
+const urlInput = document.getElementById("urlInput");
+const urlBtn = document.getElementById("urlBtn");
+
+async function ingestUrl(){
+  const url = urlInput.value.trim();
+  if(!url) return;
+  urlBtn.disabled = true;
+  try{
+    const res = await fetch(API_BASE + "/ingest-url", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({url})
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.detail || "Ingest failed");
+    toast(`Ingested URL — ${data.chunks_stored} chunks stored`, "success");
+    urlInput.value = "";
+    refreshDocuments();
+  }catch(err){
+    toast(err.message || "Failed to ingest URL", "error");
+  }finally{
+    urlBtn.disabled = false;
+  }
+}
+urlBtn.addEventListener("click", ingestUrl);
+urlInput.addEventListener("keydown", (e) => { if(e.key === "Enter") ingestUrl(); });
+
+/* ---------------- reset session ---------------- */
+document.getElementById("resetBtn").addEventListener("click", async () => {
+  try{
+    await fetch(API_BASE + "/chat/reset", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({session_id: getSessionId()})
+    });
+  }catch(err){ /* non-fatal */ }
+  toast("Conversation reset", "success");
+  location.reload();
+});
+
+/* ---------------- chat ---------------- */
+const chatInner = document.getElementById("chatInner");
+const chatScroll = document.getElementById("chatScroll");
+const emptyState = document.getElementById("emptyState");
+const questionInput = document.getElementById("questionInput");
+const sendBtn = document.getElementById("sendBtn");
+
+questionInput.addEventListener("input", () => {
+  questionInput.style.height = "auto";
+  questionInput.style.height = Math.min(questionInput.scrollHeight, 140) + "px";
+});
+questionInput.addEventListener("keydown", (e) => {
+  if(e.key === "Enter" && !e.shiftKey){
+    e.preventDefault();
+    askQuestion();
+  }
+});
+sendBtn.addEventListener("click", askQuestion);
+
+function scrollToBottom(){
+  chatScroll.scrollTo({top: chatScroll.scrollHeight, behavior: "smooth"});
+}
+
+function renderMarkdown(text){
+  try{
+    return marked.parse(text);
+  }catch(err){
+    return escapeHtml(text).replace(/\n/g, "<br>");
+  }
+}
+
+function highlightCitations(html){
+  return html.replace(/\[(\d+)\]/g, '<span class="cite-tag">$1</span>');
+}
+
+function buildCitationCard(c, index){
+  const parts = [];
+  parts.push(`<span class="citation-num">${index}</span>`);
+  parts.push(`<span class="citation-source">${escapeHtml(c.source || "unknown")}</span>`);
+  const metaBits = [];
+  if(c.chunk_index !== undefined) metaBits.push(`chunk ${c.chunk_index}`);
+  if(c.page !== undefined && c.page !== null) metaBits.push(`page ${c.page}`);
+  const metaStr = metaBits.length ? `<span class="citation-meta">${metaBits.join(" · ")}</span>` : "";
+
+  let headingHtml = "";
+  if(c.heading){
+    headingHtml = `<div class="citation-heading">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="11" height="11"><path d="M9 18l6-6-6-6"/></svg>
+      ${escapeHtml(c.heading)}
+    </div>`;
+  }
+
+  const distHtml = (c.distance !== undefined) ? `<span class="citation-dist">d=${c.distance}</span>` : "";
+
+  return `<div class="citation-card">
+    <div class="citation-head">${parts.join(" ")}${metaStr}${distHtml}</div>
+    ${headingHtml}
+    <div class="citation-context">${escapeHtml(c.context || "")}</div>
+  </div>`;
+}
+
+async function askQuestion(){
+  const question = questionInput.value.trim();
+  if(!question) return;
+
+  emptyState.style.display = "none";
+  questionInput.value = "";
+  questionInput.style.height = "auto";
+  sendBtn.disabled = true;
+
+  // user bubble
+  const userMsg = document.createElement("div");
+  userMsg.className = "msg msg-user";
+  userMsg.innerHTML = `<div class="msg-bubble">${escapeHtml(question)}</div>`;
+  chatInner.appendChild(userMsg);
+
+  // assistant bubble w/ typing indicator
+  const assistantMsg = document.createElement("div");
+  assistantMsg.className = "msg msg-assistant";
+  const bubble = document.createElement("div");
+  bubble.className = "msg-bubble";
+  bubble.innerHTML = `<div class="typing-dots"><span></span><span></span><span></span></div>`;
+  assistantMsg.appendChild(bubble);
+  chatInner.appendChild(assistantMsg);
+  scrollToBottom();
+
+  try{
+    const res = await fetch(API_BASE + "/chat", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        question,
+        session_id: getSessionId(),
+        n_results: parseInt(nResultsInput.value, 10),
+        temperature: parseFloat(temperatureInput.value),
+        top_k: parseInt(topKInput.value, 10)
+      })
+    });
+
+    if(!res.ok){
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || "Request failed");
+    }
+
+    // Handle non-streaming JSON short-circuit (e.g. "no relevant info" case)
+    const contentType = res.headers.get("content-type") || "";
+    if(contentType.includes("application/json")){
+      const data = await res.json();
+      bubble.classList.add("no-results");
+      bubble.innerHTML = escapeHtml(data.answer || "No answer returned.");
+      scrollToBottom();
+      return;
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let fullText = "";
+    let firstToken = true;
+
+    while(true){
+      const {done, value} = await reader.read();
+      if(done) break;
+      fullText += decoder.decode(value, {stream: true});
+
+      if(firstToken){ bubble.innerHTML = ""; firstToken = false; }
+
+      if(fullText.includes("__CITATIONS_START__")){
+        const [answerPart] = fullText.split("__CITATIONS_START__");
+        bubble.innerHTML = highlightCitations(renderMarkdown(answerPart));
+      }else{
+        bubble.innerHTML = highlightCitations(renderMarkdown(fullText));
+      }
+      scrollToBottom();
+    }
+
+    const [answerText, citationPart] = fullText.split("__CITATIONS_START__");
+    bubble.innerHTML = highlightCitations(renderMarkdown(answerText.trim()));
+
+    if(citationPart){
+      let citations = [];
+      try{ citations = JSON.parse(citationPart); }catch(e){ citations = []; }
+
+      if(citations.length){
+        const block = document.createElement("div");
+        block.className = "citations-block";
+        const toggle = document.createElement("button");
+        toggle.className = "citations-toggle";
+        toggle.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg> ${citations.length} source${citations.length > 1 ? "s" : ""}`;
+        const list = document.createElement("div");
+        list.className = "citations-list";
+        citations.forEach((c, i) => {
+          list.insertAdjacentHTML("beforeend", buildCitationCard(c, i));
+        });
+        toggle.addEventListener("click", () => {
+          toggle.classList.toggle("open");
+          list.classList.toggle("show");
+        });
+        block.appendChild(toggle);
+        block.appendChild(list);
+        assistantMsg.appendChild(block);
+      }
+    }
+    scrollToBottom();
+  }catch(err){
+    bubble.classList.add("no-results");
+    bubble.innerHTML = "⚠ " + escapeHtml(err.message || "Something went wrong reaching the backend.");
+    toast(err.message || "Chat request failed", "error");
+  }finally{
+    sendBtn.disabled = false;
+  }
+}
+
+/* ---------------- init ---------------- */
+refreshDocuments();
+</script>
+</body>
+</html>
