@@ -4,7 +4,6 @@ A fully local, privacy-preserving Retrieval-Augmented Generation (RAG) system. U
 
 Built during an industrial AI/ML internship, with on-premise and offline deployment as the core design constraint.
 
-<!-- Add a screenshot or GIF here: ![Demo](docs/demo.gif) -->
 
 ## Why this exists
 
@@ -30,30 +29,6 @@ Most RAG tutorials assume a hosted LLM API. That is a non-starter for organizati
 **Frontend**
 - Dark, console-style UI in vanilla HTML/CSS/JS
 - Streaming chat, expandable citation cards, drag-and-drop document sidebar, and a live parameters panel
-
-## Architecture
-
-```
-            ┌────────────┐
- Documents ─►  Ingestion  ├─► chunks + headings
- (PDF/DOCX/ │ (parse,     │         │
-  TXT/URL)  │  clean)     │         ▼
-            └────────────┘   ┌──────────────┐
-                             │ nomic-embed  │
-                             │ (via Ollama) │
-                             └──────┬───────┘
-                                    ▼
-                             ┌──────────────┐
-                             │   ChromaDB   │
-                             └──────┬───────┘
-                                    │ top-k retrieval
- Question ─► query rewrite ─────────┤
-                                    ▼
-                             ┌──────────────┐
-                             │  qwen3:1.7b  │──► streamed answer + citations
-                             │ (via Ollama) │
-                             └──────────────┘
-```
 
 ## Tech stack
 
@@ -141,10 +116,9 @@ Adjust the tree above to match the actual layout.
 
 ## License
 
-Add a license (MIT is a common default) and reference it here.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
 ## Author
 
 **Karthikeyan**
 B.Tech CSE, SRM University Delhi-NCR
-GitHub: [@<your-username>](https://github.com/<your-username>)
